@@ -107,3 +107,19 @@ repository [https://github.com/microsoft/Graphormer](https://github.com/microsof
 
 [1] Ying, C., Cai, T., Luo, S., Zheng, S., Ke, G., He, D., Shen, Y., Liu, T.Y.: Do transformers really perform badly for graph representation?
 Advances in Neural Information Processing Systems 34 (2021)
+
+## Citation
+Please cite if you use our code:
+
+```
+@misc{https://doi.org/10.48550/arxiv.2203.12616,
+  doi = {10.48550/ARXIV.2203.12616},
+  url = {https://arxiv.org/abs/2203.12616},
+  author = {Pellegrini, Chantal and Kazi, Anees and Navab, Nassir},
+  keywords = {Machine Learning (cs.LG), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Unsupervised Pre-Training on Patient Population Graphs for Patient-Level Predictions},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {arXiv.org perpetual, non-exclusive license}
+}
+```
