@@ -48,7 +48,6 @@ def init_model(args, cross_val_split=None):
             intput_dropout_rate=args.intput_dropout_rate,
             weight_decay=args.weight_decay,
             ffn_dim=args.ffn_dim,
-            use_seq_tokens=args.use_seq_tokens,
             dataset_name=args.dataset_name,
             task=args.task,
             edge_vars=args.edge_vars,
@@ -66,16 +65,12 @@ def init_model(args, cross_val_split=None):
             run_name=args.runname,
             pad_mode=args.pad_mode,
             rotation=args.rotation,
-            not_use_dev=args.not_use_dev,
             loss_weighting=args.loss_weighting,
             compute_results=args.compute_results,
-            use_sim_graph_tadpole=args.use_sim_graph_tadpole,
             mask_all_tadpole=args.mask_all,
             fold=args.fold,
             use_simple_acu_task=args.use_simple_acu_task,
             set_id=args.set_id,
-            graphormer_lr=args.graphormer_lr,
-            new_encoder=args.new_encoder
         )
     else:
         model = Graphormer(
@@ -93,7 +88,6 @@ def init_model(args, cross_val_split=None):
             intput_dropout_rate=args.intput_dropout_rate,
             weight_decay=args.weight_decay,
             ffn_dim=args.ffn_dim,
-            use_seq_tokens=args.use_seq_tokens,
             dataset_name=args.dataset_name,
             task=args.task,
             edge_vars=args.edge_vars,
@@ -111,23 +105,19 @@ def init_model(args, cross_val_split=None):
             run_name=args.runname,
             pad_mode=args.pad_mode,
             rotation=args.rotation,
-            not_use_dev=args.not_use_dev,
             loss_weighting=args.loss_weighting,
             compute_results=args.compute_results,
-            use_sim_graph_tadpole=args.use_sim_graph_tadpole,
             mask_all_tadpole=args.mask_all,
             fold=args.fold,
             use_simple_acu_task=args.use_simple_acu_task,
             set_id=args.set_id,
-            graphormer_lr=args.graphormer_lr,
-            new_encoder=args.new_encoder
         )
 
     if args.pretraining_path != '':
         # load model weights except for classification layer
         if args.dataset_name == 'tadpole_class' or args.dataset_name == 'tadpole':
             if cross_val_split == None:
-                state_dict = torch.load(args.pretraining_path)  # ['state_dict']
+                state_dict = torch.load(args.pretraining_path)  # ['state_dict'] add in case full model is saved and not only state_dict
             else:
                 if args.mask_all:
                     path = f"exps/tadpole_mask/lightning_logs/PT_patient_mask_ratio_{args.mask_ratio}_mask_all_fold{cross_val_split}/checkpoints/epoch6000.pt"
@@ -151,52 +141,23 @@ def init_model(args, cross_val_split=None):
 
         elif args.dataset_name == 'mimic':
             state_dict = torch.load(args.pretraining_path)
-            # delete final layer
+            # delete final layer, can need to be adapted dependent on model and pre-training mode
             try:
                 # feature masking pretraining
                 state_dict.pop('bin_out_proj_vals.weight')
                 state_dict.pop('bin_out_proj_vals.bias')
                 state_dict.pop('bin_out_proj_treat.weight')
                 state_dict.pop('bin_out_proj_treat.bias')
-                # multitask pretraining
-                # state_dict.pop('bin_out_proj_vals_FM.weight')
-                # state_dict.pop('bin_out_proj_vals_FM.bias')
-                # state_dict.pop('bin_out_proj_treat_FM.weight')
-                # state_dict.pop('bin_out_proj_treat_FM.bias')
-                # state_dict.pop('bin_out_proj_vals_PM.weight')
-                # state_dict.pop('bin_out_proj_vals_PM.bias')
-                # state_dict.pop('bin_out_proj_treat_PM.weight')
-                # state_dict.pop('bin_out_proj_treat_PM.bias')
-                # state_dict.pop('bin_out_proj_vals_BM.weight')
-                # state_dict.pop('bin_out_proj_vals_BM.bias')
-                # state_dict.pop('bin_out_proj_treat_BM.weight')
-                # state_dict.pop('bin_out_proj_treat_BM.bias')
-                # state_dict.pop('bin_out_proj_TP.weight')
-                # state_dict.pop('bin_out_proj_TP.bias')
 
             except Exception as e:
                 print("output layer did not exists")
                 state_dict.pop('bin_out_proj.weight')
                 state_dict.pop('bin_out_proj.bias')
-            if args.task == 'rea':  # other sequence length, so pos. encodings can not directly be used
-                state_dict.pop('vals_transformer.embeddings.position_ids')
-                state_dict.pop('vals_transformer.embeddings.position_embeddings.weight')
-                state_dict.pop('treatment_transformer.embeddings.position_ids')
-                state_dict.pop('treatment_transformer.embeddings.position_embeddings.weight')
 
         elif args.dataset_name == 'sepsis':
             state_dict = torch.load(args.pretraining_path)
-            # drop all layers from data encoder and decoder, graph encoding layers can remain
-            if args.new_encoder:
-                for key in list(state_dict.keys()):
-                    if 'treatment_transformer' in key:
-                        state_dict.pop(key)
-                    elif 'treatment_upscale' in key:
-                        state_dict.pop(key)
-                    elif 'bin_out_proj' in key:
-                        state_dict.pop(key)
 
-            elif args.PT_transformer:
+            if args.PT_transformer:
                 state_dict.pop('age_encoder.weight')
                 state_dict.pop('age_encoder.bias')
                 state_dict.pop('demographics_encoder.weight')
@@ -223,9 +184,7 @@ def init_model(args, cross_val_split=None):
 
         with torch.no_grad():
             missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-            if args.new_encoder:
-                assert len(unexpected_keys) == 66, f"Unexpected keys: {unexpected_keys}"
-                assert len(missing_keys) == 26, f"Missing keys: {missing_keys}"
+
             if args.PT_transformer:
                 assert len(unexpected_keys) == 0, f"Unexpected keys: {unexpected_keys}"
                 assert len(missing_keys) == 9, f"Missing keys: {missing_keys}"
@@ -463,8 +422,6 @@ def cli_main():
                     # set test df to results
                     test_df[label_ratio][rotation] = result[0][f"test_auroc_{args.task}"]  # auc
                     test_df_acc[label_ratio][rotation] = result[0][f"test_acc_{args.task}"]  # acc
-                    # test_df[label_ratio][rotation] = result[0]['test_measurement_rmse_pre_mask']
-                    # test_df_acc[label_ratio][rotation] = result[0]['test_treat_f1_pre_mask']
                     test_df.to_csv(test_df_name, index=False)
                     test_df_acc.to_csv(test_df_name_acc, index=False)
             pprint(result)
@@ -567,47 +524,6 @@ def cli_main():
         for idx, (val_acc, val_f1, val_auroc) in enumerate(zip(avg_val_acc, avg_val_f1, avg_val_aurocs)):
             logger.log_metrics(metrics={'val_acc_disease_pred': val_acc, 'val_f1': val_f1, 'val_auroc': val_auroc}, step=(idx + 1) * 10)
         time.sleep(3)
-
-        f = open("best_results_new.txt", "a+")
-        f.write(f'{args.runname}:\n')
-        f.write(f'Lowest train loss avg: {sum([min(l) for l in train_losses.values()]) / len(train_losses.values())}\n')
-        f.write(f'Highest train acc avg: {sum([max(l) for l in train_accs.values()]) / len(train_accs.values())}\n')
-        f.write(f'Highest train f1 avg: {sum([max(l) for l in train_f1s.values()]) / len(train_f1s.values())}\n')
-        f.write(f'Highest train auroc avg: {sum([max(l) for l in train_aurocs.values()]) / len(train_aurocs.values())}\n')
-        f.write(f'Lowest val loss avg: {sum([min(l) for l in val_losses.values()]) / len(val_losses.values())}\n')
-        f.write(f'Highest val acc avg: {sum([max(l) for l in val_accs.values()]) / len(val_accs.values())}\n')
-        f.write(f'Highest val f1 avg: {sum([max(l) for l in val_f1s.values()]) / len(val_f1s.values())}\n')
-        f.write(f'Highest val auroc avg: {sum([max(l) for l in val_aurocs.values()]) / len(val_aurocs.values())}\n')
-        f.close()
-
-        f = open("best_epoch_avg_results_new.txt", "a+")
-        f.write(f'{args.runname}:\n')
-        # index for which the average of val_accs was highest
-        best_val_acc_idx = np.argmax(avg_val_acc)
-        best_iteration = (best_val_acc_idx + 1) * 10  # val accuracy logging start in 10th epoch
-        f.write(f'Best Epoch: {best_iteration}:\n')
-        f.write(f'Highest val acc avg: {avg_val_acc[best_val_acc_idx]}\n')
-        f.write(f'Lowest val loss avg: {avg_val_losses[best_iteration + 1]}\n')  # zeroth epoch is logged twice because of pipeline sanity check
-        f.write(f'Highest val f1 avg: {avg_val_f1[best_val_acc_idx]}\n')
-        f.write(f'Highest val auroc avg: {avg_val_aurocs[best_val_acc_idx]}\n')
-        f.write(f'Lowest train loss avg: {avg_train_losses[best_iteration]}\n')
-        f.write(f'Highest train acc avg: {avg_train_acc[best_iteration]}\n')
-        f.write(f'Highest train f1 avg: {avg_train_f1[best_iteration]}\n')
-        f.write(f'Highest train auroc avg: {avg_train_aurocs[best_val_acc_idx]}\n')
-        f.close()
-
-        f = open("last_epoch_avg_results_new.txt", "a+")
-        f.write(f'{args.runname}:\n')
-        # index for which the average of val_accs was highest
-        f.write(f'val acc avg: {avg_val_acc[-1]}\n')
-        f.write(f'val loss avg: {avg_val_losses[-1]}\n')  # zeroth epoch is logged twice because of pipeline sanity check
-        f.write(f'val f1 avg: {avg_val_f1[-1]}\n')
-        f.write(f'val auroc avg: {avg_val_aurocs[-1]}\n')
-        f.write(f'train loss avg: {avg_train_losses[-1]}\n')
-        f.write(f'train acc avg: {avg_train_acc[-1]}\n')
-        f.write(f'train f1 avg: {avg_train_f1[-1]}\n')
-        f.write(f'train auroc avg: {avg_train_aurocs[-1]}\n')
-        f.close()
 
 
 if __name__ == '__main__':

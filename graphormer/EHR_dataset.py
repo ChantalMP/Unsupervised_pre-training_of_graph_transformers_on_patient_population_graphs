@@ -1,37 +1,20 @@
 import json
 import os
 import os.path as osp
-import random
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
-import torch_geometric
-from torch_geometric.data import Dataset, Data, RandomNodeSampler
+from torch_geometric.data import Dataset, Data
 
 from graphormer import wrapper
 from graphormer.utils.utils import summarize_acu_task
 
 
-class TruncateData(object):
-    r"""Row-normalizes node features to sum-up to one."""
-
-    def __init__(self, parts):
-        self.parts = parts
-
-    def __call__(self, data):
-        sampler = RandomNodeSampler(data=data, num_parts=self.parts, shuffle=False)
-        item = next(iter(sampler))
-        return item
-
-    def __repr__(self):
-        return '{}()'.format(self.__class__.__name__)
-
-
 class EHRDataset(Dataset):
     def __init__(self, root, mask, name, raw_file_name, offset=3, bin_split_idx=14, transform=None, pre_transform=None, parts=None, split=None,
-                 drop_val_patients=False, cross_val_split=None, fold=None, use_sim_graph_tadpole=True, mask_all=False, k=5, mask_ratio=0.1, task=""):
+                 drop_val_patients=False, cross_val_split=None, fold=None, mask_all=False, k=5, mask_ratio=0.1, task=""):
         # if true masking task, else classification
         self.mask = mask
         self.mask_value = 95  # no class label but inside offset
@@ -41,25 +24,14 @@ class EHRDataset(Dataset):
         part_str = f'_truncated_{parts}parts' if parts else ''
         self.root = root
         self.raw_file_name = raw_file_name
-        self.full_data = (raw_file_name == "tadpole_numerical_full.csv")
         self.tranductive_pre = False
         self.k = k
         self.mask_ratio = mask_ratio
 
-        self.discrete_columns = ['node_ID', 'DX_bl', 'PTGENDER', 'APOE4', 'CDRSB', 'ADAS11', 'ADAS13', 'MMSE', 'RAVLT_immediate',
-                                 'RAVLT_learning', 'RAVLT_forgetting', 'FAQ',
-                                 'FRONTQC_UCSFFSX_11_02_15_UCSFFSX51_08_01_16', 'PARQC_UCSFFSX_11_02_15_UCSFFSX51_08_01_16',
-                                 'INSULAQC_UCSFFSX_11_02_15_UCSFFSX51_08_01_16',
-                                 'BGQC_UCSFFSX_11_02_15_UCSFFSX51_08_01_16', 'CWMQC_UCSFFSX_11_02_15_UCSFFSX51_08_01_16',
-                                 'VENTQC_UCSFFSX_11_02_15_UCSFFSX51_08_01_16',
-                                 'DXCHANGE', 'PTEDUCAT', 'PTETHCAT', 'PTRACCAT', 'PTMARRY'] if self.full_data else ['node_ID', 'DX_bl',
-                                                                                                                    'PTGENDER', 'APOE4', 'CDRSB',
-                                                                                                                    'ADAS11', 'MMSE',
-                                                                                                                    'RAVLT_immediate']
-        self.data_path = f'{name}_graph_class{part_str}{f"_drop_val_{split}" if drop_val_patients else ""}_fold{fold}{"_full" if self.full_data else ""}{"_transductive_pre" if self.tranductive_pre else ""}{"_sim" if use_sim_graph_tadpole else ""}{f"_k{self.k}" if self.k != 5 else ""}.pt'
+        self.discrete_columns = ['node_ID', 'DX_bl', 'PTGENDER', 'APOE4', 'CDRSB', 'ADAS11', 'MMSE', 'RAVLT_immediate']
+        self.data_path = f'{name}_graph_class{part_str}{f"_drop_val_{split}" if drop_val_patients else ""}_fold{fold}{"_transductive_pre" if self.tranductive_pre else ""}{"_sim"}{f"_k{self.k}" if self.k != 5 else ""}.pt'
         self.drop_val_patients = drop_val_patients
         self.cross_val = False
-        self.use_sim_graph_tadpole = use_sim_graph_tadpole
 
         if split:
             self.split = split
@@ -79,8 +51,8 @@ class EHRDataset(Dataset):
 
         processed_data = torch.load(osp.join(self.processed_dir, self.data_path))
         pre_processed_data_path = Path(osp.join(self.processed_dir, f'{name}_graph_class_preprocessed{part_str}'
-                                                                    f'{f"_drop_val_{split}" if drop_val_patients else ""}_fold{fold}{"_full" if self.full_data else ""}'
-                                                                    f'{"_transductive_pre" if self.tranductive_pre else ""}{"_sim" if use_sim_graph_tadpole else ""}{f"_k{self.k}" if self.k != 5 else ""}.pt'))
+                                                                    f'{f"_drop_val_{split}" if drop_val_patients else ""}_fold{fold}'
+                                                                    f'{"_transductive_pre" if self.tranductive_pre else ""}{"_sim"}{f"_k{self.k}" if self.k != 5 else ""}.pt'))
 
         if pre_processed_data_path.exists():
             self.pre_processed_data = torch.load(pre_processed_data_path)
@@ -292,11 +264,10 @@ class TadpoleDataset(EHRDataset):
             df = pd.read_csv(raw_path)
 
             # only select labels of start set
-            if not self.full_data:
-                df = df[['node_ID', 'DX_bl', 'AGE', 'PTGENDER', 'APOE4', 'CDRSB', 'ADAS11', 'MMSE', 'RAVLT_immediate', 'Hippocampus', 'WholeBrain',
-                         'Entorhinal', 'MidTemp', 'FDG']]
+            df = df[['node_ID', 'DX_bl', 'AGE', 'PTGENDER', 'APOE4', 'CDRSB', 'ADAS11', 'MMSE', 'RAVLT_immediate', 'Hippocampus', 'WholeBrain',
+                     'Entorhinal', 'MidTemp', 'FDG']]
 
-            if self.drop_val_patients:
+            if self.drop_val_patients:  # inductive setup, transductive currently not supported
                 if self.split == 'train':
                     idxs = self.train_idxs
                 elif self.split == 'val':
@@ -314,21 +285,9 @@ class TadpoleDataset(EHRDataset):
                 df = df[df.node_ID.isin(idxs)]  # unnormalized age
                 df_norm = df_norm[df_norm.node_ID.isin(idxs)]  # normalized age
 
-            else:
-                # transductive: normalize on all nodes
-                for col in [col for col in df.columns if col not in self.discrete_columns and col != 'AGE']:  # normalize imaging features
-                    df[col] = (df[col] - df[col].min()) / (df[col].max() - df[col].min())
-
-                df_norm = df.copy()  # in df age remains unnormalized, so we can compute age similarity
-                df_norm['AGE'] = (df['AGE'] - df['AGE'].min()) / (df['AGE'].max() - df['AGE'].min())  # normalize age for processing
-
             node_ids = np.array(df_norm['node_ID'].values)
             # drop labels and edge building features
-            if not self.use_sim_graph_tadpole:
-                drop_columns = ['DX_bl', 'AGE', 'PTGENDER', 'node_ID', 'DXCHANGE'] if self.full_data else ['DX_bl', 'AGE', 'PTGENDER',
-                                                                                                           'node_ID']  # we don't use edge features as node features here
-            else:
-                drop_columns = ['DX_bl', 'node_ID', 'DXCHANGE'] if self.full_data else ['DX_bl', 'node_ID']
+            drop_columns = ['DX_bl', 'node_ID']
 
             X = df_norm.drop(drop_columns, axis=1)
 
@@ -338,8 +297,7 @@ class TadpoleDataset(EHRDataset):
             X = X[discrete_features + [col for col in X.columns if col not in discrete_features]]
 
             if self.mask_all:
-                mask_columns = ['APOE4', 'CDRSB', 'ADAS11', 'ADAS13', 'MMSE', 'RAVLT_immediate', 'RAVLT_learning',
-                                'RAVLT_forgetting', ] if self.full_data else ['APOE4', 'CDRSB', 'ADAS11', 'MMSE', 'RAVLT_immediate']
+                mask_columns = ['APOE4', 'CDRSB', 'ADAS11', 'MMSE', 'RAVLT_immediate']
                 not_mask_column_indices = np.where(np.isin(X.columns, mask_columns, invert=True))
             else:
                 mask_columns = ['APOE4', 'CDRSB', 'ADAS11', 'ADAS13', 'MMSE', 'RAVLT_immediate', 'Hippocampus', 'WholeBrain', 'Entorhinal', 'MidTemp',
@@ -350,10 +308,7 @@ class TadpoleDataset(EHRDataset):
 
             train_mask, val_mask, test_mask = self.tadpole_train_val_test_masks(df_norm)
 
-            if not self.use_sim_graph_tadpole:
-                edge_idx, edge_features = self.create_edges(df, age_key='AGE', sex_key='PTGENDER', feature_type=2)
-            else:
-                edge_idx, edge_features = self.create_edges_similarity_tadpole(df)
+            edge_idx, edge_features = self.create_edges_similarity_tadpole(df)
 
             self.save_data(node_id=node_ids, x=x, edge_idx=edge_idx, edge_features=edge_features, y=y, final_mask=None, train_mask=train_mask,
                            val_mask=val_mask, test_mask=test_mask, not_mask_column_indices=not_mask_column_indices, split=self.split)
@@ -378,30 +333,10 @@ class MIMICDataset(Dataset):
         self.pad_mode = pad_mode
         self.predict = predict
         self.drop_val_patients = drop_val_patients
-        self.vals_weight = np.load('data_vis/MI_scores/score_array_vals.npy')
-        self.treat_weight = np.load('data_vis/MI_scores/score_array_treat.npy')
-        self.dems_weight = np.load('data_vis/MI_scores/score_array_dems.npy')[[0, 1, 4, 5]]
-        self.edge_vars = edge_vars  # 0:'age', 1:'half_edge_half_node', 2:'half_edge_full_node', 3:'full_edge_full_node', 4: 'dems', 5:only vals
-        edge_id = 3 if self.edge_vars == 'full_edge_full_node' else (2 if self.edge_vars == 'half_edge_full_node' else (
-            1 if self.edge_vars == 'half_edge_half_node' else (4 if self.edge_vars == 'dems' else 0)))
+        self.edge_vars = edge_vars
         self.k = k
-        self.keep_dems = False  # default is False
-        if self.edge_vars == 'none':
-            edge_id = 'none'
-        elif self.edge_vars == 'vals':
+        if self.edge_vars == 'vals':  # final decision, code only supports edges based on measurements ("vals")
             edge_id = f'5_k{self.k}' if self.k != 5 else 5
-        elif self.edge_vars == 'treats':
-            edge_id = 6
-        elif self.edge_vars == 'better_half_corr':
-            edge_id = 7
-        elif self.edge_vars == 'high_corr':
-            edge_id = 8
-        elif self.edge_vars == 'random':
-            edge_id = 9
-        elif self.edge_vars == 'weighted':  # weighted vals with MI
-            edge_id = 10
-        if self.keep_dems:
-            edge_id = f"{edge_id}_keep_dems"
 
         self.lin_interpolation = True
         self.mask_col = (self.pad_mode == 'pad_emb')
@@ -430,9 +365,8 @@ class MIMICDataset(Dataset):
                 for i in range(num_graphs)]
             self.data_path = f'rotations/rot{rotation}/mimic_graph_full_edge_{edge_id}_knn_{"lin_interpol_" if self.lin_interpolation else ""}subset_' if not self.drop_val_patients or self.split != 'train' else f'rotations/rot{rotation}/mimic_graph_train_edge_{edge_id}_knn_{"lin_interpol_" if self.lin_interpolation else ""}subset_'
         self.use_treatment_input = use_treatment_input
-        self.task = task  # possible tasks: mask_random, mask_next_step, mask_treatment, icd, los, rea, acu
+        self.task = task  # possible tasks: mask_random, mask_next_step, mask_treatment, los, acu
         self.use_simple_acu_task = use_simple_acu_task
-        self.stay_lengths = {'icd': 24, 'los': 24, 'rea': 48, 'acu': 24}
         self.mask = task in ['mask_random', 'mask_next_step', 'mask_treatment']
 
         super().__init__(root + f'/{split}', transform, pre_transform)
@@ -497,33 +431,6 @@ class MIMICDataset(Dataset):
         else:
             return self.split == 'train' or self.split == 'val' or self.split == 'test'  # for now we do not use test set nodes at all
 
-    def compute_dem_similarity(self, dems, dems2):
-        # age,gender,admission_type,first_careunit
-        similarity = 0
-        if abs(dems[:, 0] - dems2[:, 0]) <= 2:
-            similarity += 1
-        similarity += torch.sum(dems[:, 1:] == dems2[:, 1:])
-
-        return similarity / 4  # value between 0 and 1
-
-    def compute_dem_similarity_weighted(self, dems, dems2):
-        # age,gender,admission_type,first_careunit
-        w = self.dems_weight
-        similarity = 0
-        if abs(dems[:, 0] - dems2[:, 0]) <= 2:
-            similarity += 1 * w[0]
-        similarity += torch.sum((dems[:, 1:] == dems2[:, 1:]).int() * w[1:])
-
-        return similarity / 4  # value between 0 and 1
-
-    def compute_age_similarity(self, dems, dems2):
-        # age,gender,admission_type,first_careunit
-        sex_diff = 0
-        age_diff = abs(dems[:, 0] - dems2[:, 0])
-        if age_diff <= 2:
-            sex_diff = abs(dems[:, 1] - dems2[:, 1])
-
-        return age_diff, sex_diff  # 0 or 1
 
     def get_or_compute_val_descriptor(self, idx, vals, descriptor_cache):
         if idx in descriptor_cache:
@@ -538,61 +445,7 @@ class MIMICDataset(Dataset):
         dist = torch.tensor(np.linalg.norm(vals_descriptors1 - vals_descriptors2, axis=0).mean())
         return 1 - torch.sigmoid(dist)  # in which range is this value? in test graph: 0.01 - 0.42 for half features, 0.02 - 0.4 for full features
 
-    def weightedL2(self, q, w):
-        # q = q[w > 0.01]
-        return np.sqrt((q * q * w).sum())  # * w
-
-    def weightedL2_treat(self, q, w):
-        # q = q[w > 0.01]
-        return np.sqrt(((1 - q) * (1 - q) * w).sum())  # * w
-
-    def compute_vals_similarity_weighted(self, vals_descriptors1, vals_descriptors2):
-        # per column compute similarity of time-series
-        dist = torch.tensor(self.weightedL2(vals_descriptors1 - vals_descriptors2, self.vals_weight).mean())  # np.linalg.norm
-        return 1 - torch.sigmoid(dist)  # in which range is this value? in test graph: 0.01 - 0.42 for half features, 0.02 - 0.4 for full features
-
-    def get_or_compute_treat_descriptor(self, idx, treats, descriptor_cache):
-        if idx in descriptor_cache:
-            return descriptor_cache[idx]
-        else:
-            descriptors = torch.max(treats, dim=0)[0]
-            descriptor_cache[idx] = descriptors
-            return descriptors
-
-    def compute_treat_similarity(self, treat_descriptors1, treat_descriptors2):
-        # binarize treatments and compute similarity of binary vectors, maybe later do for parts of time sequence separately
-        dist = np.linalg.norm(treat_descriptors1 - treat_descriptors2)
-        return 1 - dist / 4  # in which range is this value? 0.2 - 1
-
-    def compute_treat_similarity_weighted(self, treat_descriptors1, treat_descriptors2):
-        sim = self.weightedL2_treat(treat_descriptors1 - treat_descriptors2, w=self.treat_weight)
-        return sim / 4
-
-    def create_edges_feat_similarity_half(self, patient_half_vals):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        descriptor_cache = {}
-        all_sims = []
-        for idx1, half_vals in enumerate(patient_half_vals):
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, half_vals2 in enumerate(patient_half_vals):
-                if idx1 != idx2:
-                    vals_descriptors1 = self.get_or_compute_val_descriptor(idx1, half_vals, descriptor_cache)
-                    vals_descriptors2 = self.get_or_compute_val_descriptor(idx2, half_vals2, descriptor_cache)
-                    vals_similarity = self.compute_vals_similarity(vals_descriptors1, vals_descriptors2)
-                    all_sims.append(vals_similarity)
-                    if vals_similarity > 0.34:  # threshold selected so that every node is connected to at approximately 5 of the other nodes
-                        edge_features.append(torch.tensor(round((vals_similarity * 100) - 83), dtype=torch.int))  # discretize similarity to 0-17
-                        edges.append((idx1, idx2))
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)[:, None]
-        return edge_idx, edge_features
-
-    def create_edges_feat_similarity_half_knn(self, patient_half_vals):
+    def create_edges_feat_similarity_knn(self, patient_half_vals):
         # edge_index
         # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
         edges = []
@@ -619,233 +472,6 @@ class MIMICDataset(Dataset):
         edge_features = torch.stack(edge_features)[:, None]
         return edge_idx, edge_features
 
-    def create_edges_feat_similarity_full(self, demographics, patient_vals, patient_treatments):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        descriptor_cache_vals = {}
-        descriptor_cache_treats = {}
-        all = []
-        for idx1, (dems, vals, treats) in enumerate(zip(demographics, patient_vals, patient_treatments)):
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, (dems2, vals2, treats2) in enumerate(zip(demographics, patient_vals, patient_treatments)):
-                if idx1 != idx2:
-                    dem_similarity = self.compute_dem_similarity(dems, dems2)
-
-                    vals_descriptors1 = self.get_or_compute_val_descriptor(idx1, vals, descriptor_cache_vals)
-                    vals_descriptors2 = self.get_or_compute_val_descriptor(idx2, vals2, descriptor_cache_vals)
-                    val_similarity = self.compute_vals_similarity(vals_descriptors1, vals_descriptors2)
-
-                    treat_descriptors1 = self.get_or_compute_treat_descriptor(idx1, treats, descriptor_cache_treats)
-                    treat_descriptors2 = self.get_or_compute_treat_descriptor(idx2, treats2, descriptor_cache_treats)
-                    treat_similarity = self.compute_treat_similarity(treat_descriptors1, treat_descriptors2)
-
-                    all.append(np.mean([dem_similarity, val_similarity, treat_similarity]))
-                    if np.mean([dem_similarity, val_similarity, treat_similarity]) > 0.62:  # 0.11 - 0.78
-                        weight = torch.tensor([(dem_similarity * 4).int(), torch.round(val_similarity * 100), round(treat_similarity * 100)],
-                                              dtype=torch.int)  # binarize similarities to classes
-                        edge_features.append(weight)
-                        edges.append((idx1, idx2))
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)
-        return edge_idx, edge_features
-
-    def create_edges_feat_similarity_full_knn(self, demographics, patient_vals, patient_treatments):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        descriptor_cache_vals = {}
-        descriptor_cache_treats = {}
-        for idx1, (dems, vals, treats) in enumerate(zip(demographics, patient_vals, patient_treatments)):
-            all_sims = {}
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, (dems2, vals2, treats2) in enumerate(zip(demographics, patient_vals, patient_treatments)):
-                if idx1 != idx2:
-                    dem_similarity = self.compute_dem_similarity(dems, dems2)
-
-                    vals_descriptors1 = self.get_or_compute_val_descriptor(idx1, vals, descriptor_cache_vals)
-                    vals_descriptors2 = self.get_or_compute_val_descriptor(idx2, vals2, descriptor_cache_vals)
-                    val_similarity = self.compute_vals_similarity(vals_descriptors1, vals_descriptors2)
-
-                    treat_descriptors1 = self.get_or_compute_treat_descriptor(idx1, treats, descriptor_cache_treats)
-                    treat_descriptors2 = self.get_or_compute_treat_descriptor(idx2, treats2, descriptor_cache_treats)
-                    treat_similarity = self.compute_treat_similarity(treat_descriptors1, treat_descriptors2)
-
-                    all_sims[idx2] = [np.mean([dem_similarity, val_similarity, treat_similarity]), dem_similarity, val_similarity, treat_similarity]
-
-            # compute 5 nearest neighbors and add edges
-            sorted_sims = sorted(all_sims.items(), key=lambda x: x[1][0], reverse=True)
-            for i in range(5):
-                edges.append((idx1, sorted_sims[i][0]))
-                edge_features.append(
-                    torch.tensor([(sorted_sims[i][1][1] * 4).int(), torch.round(sorted_sims[i][1][2] * 100), round(sorted_sims[i][1][3] * 100)],
-                                 dtype=torch.int))
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)
-        return edge_idx, edge_features
-
-    def create_edges_treatment_knn(self, patient_treatments):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        descriptor_cache_treats = {}
-        for idx1, treats in enumerate(patient_treatments):
-            all_sims = {}
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, treats2 in enumerate(patient_treatments):
-                if idx1 != idx2:
-                    treat_descriptors1 = self.get_or_compute_treat_descriptor(idx1, treats, descriptor_cache_treats)
-                    treat_descriptors2 = self.get_or_compute_treat_descriptor(idx2, treats2, descriptor_cache_treats)
-                    treat_similarity = self.compute_treat_similarity(treat_descriptors1, treat_descriptors2)
-
-                    all_sims[idx2] = treat_similarity
-
-            # compute 5 nearest neighbors and add edges
-            sorted_sims = sorted(all_sims.items(), key=lambda x: x[1], reverse=True)
-            for i in range(5):
-                edges.append((idx1, sorted_sims[i][0]))
-                edge_features.append(torch.tensor(round(sorted_sims[i][1] * 100), dtype=torch.int))
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)[:, None]
-        return edge_idx, edge_features
-
-    def create_edges_demographics_knn(self, demographics):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        for idx1, dems in enumerate(demographics):
-            all_sims = {}
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, dems2 in enumerate(demographics):
-                if idx1 != idx2:
-                    dem_similarity = self.compute_dem_similarity(dems, dems2)
-                    all_sims[idx2] = dem_similarity
-
-            # compute 5 nearest neighbors and add edges
-            sorted_sims = sorted(all_sims.items(), key=lambda x: x[1], reverse=True)
-            for i in range(5):
-                edges.append((idx1, sorted_sims[i][0]))
-                edge_features.append((sorted_sims[i][1] * 4).int())
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)[:, None]
-        return edge_idx, edge_features
-
-    def create_edges_age(self, demographics):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        for idx1, dems in enumerate(demographics):
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, dems2 in enumerate(demographics):
-                if idx1 != idx2:
-                    age_diff, sex_diff = self.compute_age_similarity(dems, dems2)
-
-                    if age_diff <= 2:
-                        weight = torch.tensor([3 - age_diff, 1 - sex_diff])
-                        edge_features.append(weight.int())
-
-                        # add edge if age difference small enough
-                        edges.append((idx1, idx2))
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)
-        return edge_idx, edge_features
-
-    def create_edges_random(self, demographics):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        for idx1, dems in enumerate(demographics):
-            if idx1 % 100 == 0:
-                print(idx1)
-            for i in range(5):
-                random_idx = random.choice(list(range(0, idx1)) + list(range(idx1 + 1, len(demographics))))
-                edges.append((idx1, random_idx))
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.tensor([])
-        return edge_idx, edge_features
-
-    def create_weighted_graph_vals(self, patient_vals):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        descriptor_cache = {}
-        for idx1, half_vals in enumerate(patient_vals):
-            all_sims = {}
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, half_vals2 in enumerate(patient_vals):
-                if idx1 != idx2:
-                    vals_descriptors1 = self.get_or_compute_val_descriptor(idx1, half_vals, descriptor_cache)
-                    vals_descriptors2 = self.get_or_compute_val_descriptor(idx2, half_vals2, descriptor_cache)
-                    vals_similarity = self.compute_vals_similarity_weighted(vals_descriptors1, vals_descriptors2)
-                    all_sims[idx2] = vals_similarity
-
-            # compute 5 nearest neighbors and add edges
-            sorted_sims = sorted(all_sims.items(), key=lambda x: x[1], reverse=True)
-            for i in range(5):
-                edges.append((idx1, sorted_sims[i][0]))
-                edge_features.append(torch.round((sorted_sims[i][1] * 100)).int())  # discretize similarity to 0-17
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)[:, None]
-        return edge_idx, edge_features
-
-    def create_weighted_graph_all(self, demographics, patient_vals, patient_treatments):
-        # edge_index
-        # edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
-        edges = []
-        edge_features = []
-        descriptor_cache_vals = {}
-        descriptor_cache_treats = {}
-        for idx1, (dems, vals, treats) in enumerate(zip(demographics, patient_vals, patient_treatments)):
-            all_sims = {}
-            if idx1 % 100 == 0:
-                print(idx1)
-            for idx2, (dems2, vals2, treats2) in enumerate(zip(demographics, patient_vals, patient_treatments)):
-                if idx1 != idx2:
-                    # thresholded -> never enough
-                    dem_similarity = self.compute_dem_similarity_weighted(dems, dems2)
-                    dem_similarity = torch.tensor(0.0)
-
-                    vals_descriptors1 = self.get_or_compute_val_descriptor(idx1, vals, descriptor_cache_vals)
-                    vals_descriptors2 = self.get_or_compute_val_descriptor(idx2, vals2, descriptor_cache_vals)
-                    val_similarity = self.compute_vals_similarity_weighted(vals_descriptors1, vals_descriptors2)
-
-                    treat_descriptors1 = self.get_or_compute_treat_descriptor(idx1, treats, descriptor_cache_treats)
-                    treat_descriptors2 = self.get_or_compute_treat_descriptor(idx2, treats2, descriptor_cache_treats)
-                    treat_similarity = self.compute_treat_similarity_weighted(treat_descriptors1, treat_descriptors2)
-
-                    all_sims[idx2] = [np.mean([dem_similarity, val_similarity, treat_similarity]), dem_similarity, val_similarity,
-                                      treat_similarity]
-
-            # compute 5 nearest neighbors and add edges
-            sorted_sims = sorted(all_sims.items(), key=lambda x: x[1][0], reverse=True)
-            for i in range(5):
-                edges.append((idx1, sorted_sims[i][0]))
-                edge_features.append(
-                    torch.tensor([(sorted_sims[i][1][1] * 4).int(), torch.round(sorted_sims[i][1][2] * 100), torch.round(sorted_sims[i][1][3] * 100)],
-                                 dtype=torch.int))
-
-        edge_idx = torch.tensor(edges, dtype=torch.long)
-        edge_features = torch.stack(edge_features)
-        return edge_idx, edge_features
 
     def save_data(self, node_id, vals, demographics, treatments, is_measured, edge_idx, edge_features, y, final_mask, train_mask, val_mask, test_mask,
                   train_dev_mask, dev_mask, subset_id):
@@ -871,7 +497,7 @@ class MIMICDataset(Dataset):
             data.num_nodes = len(data.vals)
         else:
             data = torch.load(osp.join(self.processed_dir, self.all_pre_processed_graphs[idx]))
-        window_length = 48 if self.task == 'rea' else 24
+        window_length = 24
         # form y vector given task
         if self.task == 'pre_mask' or self.task == 'patient_prediction':
             # y_acu = torch.tensor([d['acu'] for d in data.y])
@@ -884,14 +510,7 @@ class MIMICDataset(Dataset):
             y = (torch.stack([d['vals'][:window_length] for d in data.y]), torch.stack([d['treatments_hour'][:window_length] for d in data.y]),
                  torch.stack([d['treatments_bin'][:14] for d in data.y]))
         else:
-            if self.task == 'icd':
-                y = [d[self.task] for d in data.y]
-                # for idx, labels in enumerate(y): #nan labels are just ignored in both loss and metric calculation
-                #     labels[np.isnan(labels)] = 0
-                #     if labels.sum() == 0:
-                #         labels[:,-1] = 1 #set to unknown
-                y = torch.cat(y)
-            elif self.task == 'acu':
+            if self.task == 'acu':
                 y = torch.tensor([d[self.task] for d in data.y])
                 assert y.max() <= 17, f'ACU label higher 17 found {y.max()}'
                 if self.use_simple_acu_task:
@@ -899,24 +518,11 @@ class MIMICDataset(Dataset):
             else:
                 y = torch.tensor([d[self.task] for d in data.y])
 
-                # for training, select random stay length later, for val task dependent, but for now just always use 24h, and only perform tasks on first 24h
-
         padding_mask = None
         if self.split == 'val' or self.split == 'train' or self.split == 'test':  # currently always
-            if self.task == 'rea':
-                # crop to first 24 rows
-                # not all patients have 48 hours of stay, need to do padding for missing hours
-                treatments = pad_from_front([d[-window_length:] for d in data['treatments']], batch_first=True, padding_value=-1)
-                padding_mask = ((treatments == -1).sum(dim=2)) == 0
-                # set all elements which are -1 in treatments to 0
-                treatments[treatments == -1] = 0
-                is_measured = pad_from_front([d[-window_length:] for d in data['is_measured']], batch_first=True, padding_value=0)
-                vals = pad_from_front([d[-window_length:] for d in data['vals']], batch_first=True, padding_value=0)
-
-            else:
-                treatments = torch.stack([d[:window_length] for d in data['treatments']])
-                is_measured = torch.stack([d[:window_length] for d in data['is_measured']])
-                vals = torch.stack([d[:window_length] for d in data['vals']])
+            treatments = torch.stack([d[:window_length] for d in data['treatments']])
+            is_measured = torch.stack([d[:window_length] for d in data['is_measured']])
+            vals = torch.stack([d[:window_length] for d in data['vals']])
             data.y = y
         # set changed variables in data
         data.vals = vals
@@ -969,10 +575,8 @@ class MIMICDataset(Dataset):
                     # here we save full ICU stay in graph, so that we can do random cropping + padding during training also for same graph
                     patient_icuids.append(patient_icuid)
                     patient_vals.append(torch.tensor(ts_vals.values.astype(np.float32)))
-                    if self.keep_dems:
-                        patient_dems.append(torch.tensor(statics.values.astype(np.float32)))
-                    else:
-                        patient_dems.append(torch.tensor(statics.drop(['ethnicity', 'insurance'], axis=1).values.astype(np.float32)))
+                    patient_dems.append(
+                        torch.tensor(statics.drop(['ethnicity', 'insurance'], axis=1).values.astype(np.float32)))  # drop for ethical reasons
                     patient_graph_dems.append(statics[['age', 'gender']])  # can stay df as it will not be used as model input or label
                     patient_treatments.append(torch.tensor(ts_treatment.values.astype(np.float32)))
                     patient_is_measured.append(torch.tensor(ts_is_measured.values.astype(np.float32)))
@@ -984,36 +588,13 @@ class MIMICDataset(Dataset):
                     y_dict['vals'] = torch.tensor(
                         ts_vals.values.astype(np.float32))  # for next timestepp task has to be created when cropping is done
                     y_dict['los'] = torch.tensor(static_tasks_binary_multilabel['Long LOS'].values.astype(np.float32))
-                    y_dict['rea'] = torch.tensor(static_tasks_binary_multilabel['Readmission 30'].values.astype(np.float32))
-                    y_dict['icd'] = torch.tensor(
-                        static_tasks_binary_multilabel.drop(['Long LOS', 'Readmission 30'], axis=1).values.astype(np.float32))
                     y_dict['acu'] = torch.tensor(final_acuity_outcome.values.astype(np.float32))
                     patient_ys.append(y_dict)
 
             train_mask, val_mask, test_mask, train_dev_mask, dev_mask = self.train_val_test_masks(patient_icuids_and_splits)
 
-            if self.edge_vars == 'age':
-                edge_idx, edge_features = self.create_edges_age(patient_dems)
-            elif self.edge_vars == 'dems':
-                edge_idx, edge_features = self.create_edges_demographics_knn(patient_dems)
-            elif self.edge_vars == 'vals':
-                edge_idx, edge_features = self.create_edges_feat_similarity_half_knn(patient_vals)
-            elif self.edge_vars == 'treats':
-                edge_idx, edge_features = self.create_edges_treatment_knn(patient_treatments)
-            elif self.edge_vars == 'half_edge_half_node' or self.edge_vars == 'half_edge_full_node' or self.edge_vars == 'better_half_corr' or self.edge_vars == 'high_corr':
-                edge_idx, edge_features = self.create_edges_feat_similarity_half_knn(patient_half_vals)
-            elif self.edge_vars == 'none':
-                edge_idx, edge_features = torch.tensor([], dtype=torch.long), torch.tensor([])
-            elif self.edge_vars == 'random':
-                edge_idx, edge_features = self.create_edges_random(patient_dems)
-            elif self.edge_vars == 'weighted':
-                edge_idx, edge_features = self.create_weighted_graph_vals(patient_vals)
-            else:  # full_edge_full_node
-                edge_idx, edge_features = self.create_edges_feat_similarity_full_knn(patient_dems, patient_vals, patient_treatments)
-
-            if self.edge_vars == 'half_edge_half_node':
-                patient_vals = patient_half_vals_node
-                patient_is_measured = patient_half_is_measured_node
+            if self.edge_vars == 'vals':
+                edge_idx, edge_features = self.create_edges_feat_similarity_knn(patient_vals)
 
             self.save_data(node_id=torch.tensor(patient_icuids), vals=patient_vals, demographics=torch.stack(patient_dems),
                            treatments=patient_treatments, is_measured=patient_is_measured, edge_idx=edge_idx,
@@ -1031,11 +612,6 @@ class SepsisDataset(Dataset):
 
         self.k = 5
         num_graphs = 40
-        # to be able to simulate data dropping on Sepsis validation and test nodes are not integrated in training graphs but in separate graphs
-        # when training with set A or B we have 40 graphs
-        # when training with both together we have 80 graphs
-        # easiest way to drop data is using a subset of the given graphs -> this corresponds to dropping data randomly as the graphs were formed randomly
-        # again because graphs were formed randomly we do not need to select random graphs we can just use the first N graphs depending on label_ratio (=data_ratio)
 
         if label_ratio != 1.0:
             num_graphs = max(int(num_graphs * label_ratio), 1)  # at least 1 graph, so 500 nodes per dataset -> equals 2.5% instead of 1%
@@ -1333,11 +909,6 @@ class SepsisDataset(Dataset):
 
     def get(self, idx):
         data = torch.load(osp.join(self.processed_dir, self.all_pre_processed_graphs[idx]))
-        # window_length = 24
-        # for memory reasons still need to use a maximum stay length -> consider up to last 96 hours of stay (4 days)
-
-        # set all train/val/test masks to True, because all nodes in graph always belong to same split
-        # if in rotation 0 something was in another split, the wrong mask will be set and the other is None, so we have to manually add them
         data.train_mask = torch.ones_like(data.y).bool()
         data.val_mask = torch.ones_like(data.y).bool()
         data.test_mask = torch.ones_like(data.y).bool()
@@ -1346,136 +917,5 @@ class SepsisDataset(Dataset):
         return data
 
 
-def pad_from_front(sequences, batch_first=False, padding_value=0.0):
-    # assuming trailing dimensions and type of all the Tensors
-    # in sequences are same and fetching those from sequences[0]
-    max_size = sequences[0].size()
-    trailing_dims = max_size[1:]
-    max_len = max([s.size(0) for s in sequences])
-    if batch_first:
-        out_dims = (len(sequences), max_len) + trailing_dims
-    else:
-        out_dims = (max_len, len(sequences)) + trailing_dims
-
-    out_tensor = sequences[0].new_full(out_dims, padding_value)
-    for i, tensor in enumerate(sequences):
-        length = tensor.size(0)
-        # use index notation to prevent duplicate references to the tensor
-        if batch_first:
-            out_tensor[i, -length:, ...] = tensor
-        else:
-            out_tensor[-length:, i, ...] = tensor
-
-    return out_tensor
-
-
-def add_dev_set_to_raw_files(rotation):
-    for raw_path in [f'data/mimic-iii-0/train/raw/rot{rotation}/random_graph_subset_{i}.json' for i in range(43)]:
-        with open(raw_path, 'r') as f:
-            raw_data = json.load(f)
-        # get same item from val set
-        val_path = raw_path.replace('train', 'val')
-        with open(val_path, 'r') as f:
-            raw_val_data = json.load(f)
-
-        # from all items where second element is 'train', randomly set 10% to 'dev'
-        for idx, item in enumerate(raw_data):
-            if item[1] == 'train':
-                if np.random.rand() < 0.1:
-                    item[1] = 'dev'
-                    raw_val_data[idx][1] = 'dev'
-
-        # save to file with adapted name
-        with open(raw_path.replace('random_graph_subset', 'random_graph_subset_dev'), 'w') as f:
-            json.dump(raw_data, f)
-        with open(val_path.replace('random_graph_subset', 'random_graph_subset_dev'), 'w') as f:
-            json.dump(raw_val_data, f)
-
-
-def visualize_graph_mimic(graph, name):
-    g = torch_geometric.utils.to_networkx(graph, to_undirected=False, node_attrs=['y'])
-    net = Network("900px", "900px", directed=False)
-    net.inherit_edge_colors(False)
-    # assign color to nodes
-    for node, data in g.nodes(data=True):
-        if data['y'] == 0:
-            color = 'green'
-        elif data['y'] == 1:
-            color = 'red'
-
-        g.nodes[node]['color'] = color
-    net.from_nx(g)
-    net.show_buttons()
-    net.show(f"mimic_graph_{name}.html")
-
-
-def visualize_graph_tadpole(graph, name):
-    graph.y = torch.tensor([elem[5] for elem in graph.y])
-    g = torch_geometric.utils.to_networkx(graph, to_undirected=False, node_attrs=['y'])
-    net = Network("900px", "900px", directed=False)
-    net.inherit_edge_colors(False)
-    # assign color to nodes
-    # for node, data in g.nodes(data=True):
-    #     if data['y'] == 0:
-    #         color = 'green'
-    #     elif data['y'] == 1:
-    #         color = 'red'
-    #     elif data['y'] == 2:
-    #         color = 'blue'
-    #
-    #     g.nodes[node]['color'] = color
-    for node, data in g.nodes(data=True):
-        # add node with label y
-        net.add_node(node, label=data['y'])
-        print(data['y'])
-    net.from_nx(g)
-    net.show_buttons()
-    net.show(f"tadpole_graph_{name}.html")
-
-
-def ensure_correct_train_val_test_split():
-    ds = MIMICDataset(root=f'data/mimic-iii-0', drop_val_patients=True, use_treatment_input=True, task='los', split='train', edge_vars="weighted",
-                      gcn=False, rotation=0, pad_mode='pad_emb', num_graphs=1)
-    sample_train = ds.get(0)
-    ds = MIMICDataset(root=f'data/mimic-iii-0', drop_val_patients=True, use_treatment_input=True, task='los', split='val', edge_vars="weighted",
-                      gcn=False, rotation=0, pad_mode='pad_emb', num_graphs=1)
-    sample_val = ds.get(0)
-    ds = MIMICDataset(root=f'data/mimic-iii-0', drop_val_patients=True, use_treatment_input=True, task='los', split='test', edge_vars="weighted",
-                      gcn=False, rotation=0, pad_mode='pad_emb', num_graphs=1)
-    sample_test = ds.get(0)
-
-    train_set_train_graph = set([s.item() for s in sample_train.node_id[sample_train.train_mask]])
-    val_set_val_graph = set([s.item() for s in sample_val.node_id[sample_val.val_mask]])
-    test_set_test_graph = set([s.item() for s in sample_test.node_id[sample_test.test_mask]])
-
-    assert train_set_train_graph.intersection(val_set_val_graph) == set()
-    assert train_set_train_graph.intersection(test_set_test_graph) == set()
-    assert val_set_val_graph.intersection(test_set_test_graph) == set()
-
-    print("all tests successful")
-
-
 if __name__ == '__main__':
-    from pyvis.network import Network
-
-    # ensure_correct_train_val_test_split()
-    # ds = MIMICDataset(root=f'data/mimic-iii-0', drop_val_patients=True, use_treatment_input=True, task='los', split='train', edge_vars="weighted",
-    #                   gcn=False, rotation=0, pad_mode='pad_emb')
-    # ds = MIMICDataset(root=f'data/mimic-iii-0', drop_val_patients=True, use_treatment_input=True, task='los', split='val', edge_vars="weighted",
-    #                   gcn=False, rotation=0, pad_mode='pad_emb')
-    # ds = MIMICDataset(root=f'data/mimic-iii-0', drop_val_patients=True, use_treatment_input=True, task='los', split='train', edge_vars='vals', num_graphs=1, gcn=False, mlp=False, rotation=0, pad_mode='pad_emb', k=5)
-    # graph = ds.get(0)
-    # visualize_graph_mimic(graph, 'k5')
-    # for r in [1,2,7,8,9]:
-    #     add_dev_set_to_raw_files(rotation=r)
-    # parts = None
-
-    # ds2 = TadpoleDataset(root='data/tadpole', mask=False, name='tadpole', raw_file_name='tadpole_numerical.csv', offset=96, bin_split_idx=5,
-    #                    split='val', drop_val_patients=True, cross_val_split=None, fold=0, use_sim_graph_tadpole=True, k=5)
-
-    # graph = ds2.get(0)
-    # visualize_graph_tadpole(graph, 'only_feat_5_sim_y_2')
-    # ds = MIMICDataset(root=f'data/mimic-iii-0', drop_val_patients=True, use_treatment_input=True, task='los', split='val', edge_vars='vals', rotation=0)
-    # item = ds.get(0)
-    ds = SepsisDataset(root='data/sepsis', split='train', set_id='AB', rotation=None)
-    ds.get(0)
+    pass

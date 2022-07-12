@@ -37,19 +37,11 @@ def create_subgraphs_random(set='A'):
     # load patient id lists for all splits in this rotation with json
     with open(f'data/sepsis/train_set{set}.json', 'r') as f:
         train_patients = json.load(f)
-    with open(f'data/sepsis/val_set{set}.json', 'r') as f:
-        val_patients = json.load(f)
-    with open(f'data/sepsis/test_set{set}.json', 'r') as f:
-        test_patients = json.load(f)
 
     # 20336 patients for A, 20000 for B , to form batches of 500 patients split in 40 groups (508 (A)/ 500 (B) patients per group)
     # shuffle all patients list randomly
     random.shuffle(train_patients)
-    random.shuffle(val_patients)
-    random.shuffle(test_patients)
     train_splits = np.array_split(train_patients, 40)
-    val_splits = np.array_split(val_patients, 40)
-    test_splits = np.array_split(test_patients, 40)
 
     # create dir data/mimic-iii-0/train/raw/rot{rotation}/ if it not exists
     if not os.path.exists(f'data/sepsis/train/raw/training_set{set}'):
@@ -61,19 +53,9 @@ def create_subgraphs_random(set='A'):
 
     for idx in tqdm(range(len(train_splits))):
         train_list = [list((x, 'train')) for x in train_splits[idx]]
-        val_list = [list((x, 'val')) for x in val_splits[idx]]
-        test_list = [list((x, 'test')) for x in test_splits[idx]]
 
         with open(f'data/sepsis/train/raw/training_set{set}/random_graph_subset_{idx}.json', 'w') as f:
             json.dump(train_list, f)
-
-        graph_list = train_list + val_list
-        with open(f'data/sepsis/val/raw/training_set{set}/random_graph_subset_{idx}.json', 'w') as f:
-            json.dump(graph_list, f)
-
-        graph_list = train_list + val_list + test_list
-        with open(f'data/sepsis/test/raw/training_set{set}/random_graph_subset_{idx}.json', 'w') as f:
-            json.dump(graph_list, f)
 
 
 def create_val_test_graphs(set='A'):
@@ -129,7 +111,4 @@ def create_cross_val_graphs(set='A'):
 
 
 if __name__ == '__main__':
-    # create_train_val_test_split(set='B')
-    # create_subgraphs_random(set='B')
-    # create_cross_val_graphs(set='B')
     pass

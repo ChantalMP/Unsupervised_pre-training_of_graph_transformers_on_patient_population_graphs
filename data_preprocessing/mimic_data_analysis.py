@@ -1,3 +1,4 @@
+import json
 import os
 from collections import defaultdict
 
@@ -8,6 +9,7 @@ from tqdm import tqdm
 
 
 def get_original_ages():
+    # in pre-processed data by McDermott et al. the ages are already normalized, this method is used to get the original ages
     # get all patient ids
     # in patients.csv Date of birth (DOB) is saved together with Subject ID
     # in admissions admission time is saved together with Subject ID and HADM_ID
@@ -45,19 +47,6 @@ def get_original_ages():
     # print(admittime['age'].min(), admittime['age'].max(), admittime['age'].unique(), admittime['age'].value_counts())
     # get mean and std of age
     # print(admittime['age'].mean(), admittime['age'].std())
-
-
-def calc_treat_imbalance():
-    zero_count = 0
-    one_count = 0
-    for idx, patient in tqdm(enumerate(os.listdir('data/mimic-iii-0/train'))):
-        if 'patient' not in patient:  # skip non-patient files
-            continue
-        ts_treatment = pd.read_csv('data/mimic-iii-0/train/' + patient + '/' + 'ts_treatment.csv')[:24]
-        one_count += np.count_nonzero(ts_treatment.values)
-        zero_count += np.count_nonzero(ts_treatment.values == 0)
-
-    print(zero_count, one_count)
 
 
 def calc_treat_imbalance_binary():
@@ -114,79 +103,8 @@ def calc_acu_imbalance():
         print(f'{label}: {ratio}')
 
     # print(labels)
-    # class_weights = class_weight.compute_class_weight(class_weight='balanced', classes=np.unique(labels), y=np.array(labels))
     class_weights_lin = [1 / count for count in np.unique(labels, return_counts=True)[1]]
     class_weights_log = [np.abs(1.0 / (np.log(count) + 1)) for count in np.unique(labels, return_counts=True)[1]]
-
-
-def calc_icd_imbalance():  # 12411 -> 70%
-    zeros = defaultdict(int)
-    ones = defaultdict(int)
-    for idx, patient in tqdm(enumerate(os.listdir('data/mimic-iii-0/train'))):
-        if 'patient' not in patient:  # skip non-patient files
-            continue
-        icds = pd.read_csv('data/mimic-iii-0/train/' + patient + '/' + 'static_tasks_binary_multilabel.csv').values[0, 1:-1]
-        if np.isnan(icds).any():
-            if np.isnan(icds).sum() != 18:
-                print("WARNING: NOT ALL ICD CODES ARE NONE:", np.isnan(icds).sum())
-            continue
-        if icds.sum() == 0:
-            icds[-1] = 1
-        for label in range(18):
-            if icds[label] == 0:
-                zeros[label] += 1
-            elif icds[label] == 1:
-                ones[label] += 1
-
-    print(zeros)
-    print(ones)
-
-
-def calc_rea_imbalance():
-    zero_count = 0
-    one_count = 0
-    for idx, patient in tqdm(enumerate(os.listdir('data/mimic-iii-0/train'))):
-        if 'patient' not in patient:  # skip non-patient files
-            continue
-        rea_label = pd.read_csv('data/mimic-iii-0/train/' + patient + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][0]
-        if rea_label == 0:
-            zero_count += 1
-        else:
-            one_count += 1
-
-    print("train: ")
-    print(zero_count, one_count)
-    print(zero_count / (zero_count + one_count), one_count / (zero_count + one_count))
-
-    zero_count = 0
-    one_count = 0
-    for idx, patient in tqdm(enumerate(os.listdir('data/mimic-iii-0/val'))):
-        if 'patient' not in patient:  # skip non-patient files
-            continue
-        rea_label = pd.read_csv('data/mimic-iii-0/val/' + patient + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][0]
-        if rea_label == 0:
-            zero_count += 1
-        else:
-            one_count += 1
-
-    print("val: ")
-    print(zero_count, one_count)
-    print(zero_count / (zero_count + one_count), one_count / (zero_count + one_count))
-
-    zero_count = 0
-    one_count = 0
-    for idx, patient in tqdm(enumerate(os.listdir('data/mimic-iii-0/test'))):
-        if 'patient' not in patient:  # skip non-patient files
-            continue
-        rea_label = pd.read_csv('data/mimic-iii-0/test/' + patient + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][0]
-        if rea_label == 0:
-            zero_count += 1
-        else:
-            one_count += 1
-
-    print("test: ")
-    print(zero_count, one_count)
-    print(zero_count / (zero_count + one_count), one_count / (zero_count + one_count))
 
 
 def calc_los_imbalance():
@@ -220,7 +138,29 @@ def calc_los_imbalance():
             one_count += 1
 
     print(zero_count, one_count)
-    print(zero_count / (zero_count + one_count), one_count / (zero_count + one_count))
+
+
+def get_mean_dataset_values():
+    value_means = defaultdict(list)
+    for folder in tqdm(os.listdir('data/mimic-iii-0/train')):
+        # if folder is not a directory , skip it
+        if not os.path.isdir('data/mimic-iii-0/train/' + folder) or not folder.startswith('patient'):
+            continue
+        ts_vals = pd.read_csv('data/mimic-iii-0/train/' + folder + '/' + 'ts_vals.csv')
+        ts_is_measured = pd.read_csv('data/mimic-iii-0/train/' + folder + '/' + 'ts_is_measured.csv')
+
+        for col in ts_vals.columns:
+            is_measured = ts_is_measured[col.replace("'mean'", "'time_since_measured'")]
+            ts_vals[col] = ts_vals[col].mask(is_measured == 0.0, np.nan)
+            value_means[col].append(ts_vals[col].dropna().mean())
+
+    # convert all lists in value_means to overall mean
+    for col in value_means:
+        value_means[col] = np.nanmean(value_means[col])
+
+    # save means to file
+    with open('data/mimic-iii-0/value_means.json', 'w') as f:
+        json.dump(value_means, f)
 
 
 if __name__ == '__main__':

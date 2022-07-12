@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+# code was adapted for our data
 import random
 
 import numpy as np
@@ -324,7 +325,6 @@ def collator(items, max_node=512, multi_hop_max_dist=20, spatial_pos_max=20, dat
             [pad_feat_graph_unsqueeze(i, max_node_num, max_hour_num, val_feature_num, pad_mode) for i in valss])  # max_num_hours, num_features
         is_measured = torch.cat([pad_feat_graph_unsqueeze(i, max_node_num, max_hour_num, 56, pad_mode) for i in is_measureds])
 
-        # demographics = torch.cat([pad_2d_unsqueeze(i.squeeze(1), max_node_num, add1=False) for i in demographicss]) # could also delete +1 but do not need to
         demographics = torch.cat([pad_2d_unsqueeze(i.squeeze(1), max_node_num) for i in demographicss])  # could also delete +1 but do not need to
 
         if pad_mode == 'pad_emb' or pad_mode == 'emb':
@@ -332,12 +332,11 @@ def collator(items, max_node=512, multi_hop_max_dist=20, spatial_pos_max=20, dat
         else:
             treatments = torch.cat([pad_feat_graph_unsqueeze(i, max_node_num, max_hour_num, 16, pad_mode) for i in treatmentss])
 
-        # create attn_mask, can do this with arbitrary feature
-        # attn_mask = torch.stack([create_attn_mask(i.squeeze(1), max_node_num) for i in demographicss])[:, None, None]
+
 
     elif dataset == 'sepsis':
         # vals need to be padded after transformer layer + mean because if the different stay lengths
-        demographics = torch.cat([pad_2d_unsqueeze(i.squeeze(1), max_node_num) for i in demographicss])  # could also delete +1 but do not need to
+        demographics = torch.cat([pad_2d_unsqueeze(i.squeeze(1), max_node_num) for i in demographicss])
 
     else:
         x = torch.cat([pad_2d_unsqueeze(i, max_node_num) for i in xs])

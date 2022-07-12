@@ -3,9 +3,7 @@ import os
 import statistics
 
 import numpy as np
-import pandas as pd
 import torch
-from tqdm import tqdm
 
 
 def generate_cross_val_split():
@@ -76,7 +74,7 @@ def generate_labels_to_drop_same_samples(fold):
     np.save(f'data/tadpole/split/label_drop_idxs_fold2_0.05_same_samples.npy', label_drop_idxs_005)
 
 
-def generate_labels_to_drop_balanced(fold):
+def generate_labels_to_drop_balanced_tadpole(fold):
     data = torch.load(f'data/tadpole/processed/tadpole_graph_class_drop_val_train_fold{fold}_sim.pt')
     train_idxs = data.node_id
     labels_train = data.y
@@ -103,92 +101,6 @@ def generate_labels_to_drop_mimic(rotation):
         if not os.path.exists(f'data/mimic-iii-0/drop/los'):
             os.makedirs(f'data/mimic-iii-0/drop/los')
         np.save(f'data/mimic-iii-0/drop/los/label_drop_idxs_rot{rotation}_{ratio}.npy', label_idxs)
-
-
-def generate_labels_to_drop_mimic_rea(rotation):  # needs to be balanced, as otherwise in 1% one label is missing
-    # currently for los
-    with open(f'data/mimic-iii-0/rotations/train_patients_rot_{rotation}.json') as f:
-        train_idxs = json.load(f)
-
-    labels = []
-    patients = []
-    for patient in tqdm(train_idxs):
-        if os.path.isfile('data/mimic-iii-0/train/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv'):
-            rea_label = pd.read_csv('data/mimic-iii-0/train/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][
-                0]
-            labels.append(rea_label)
-            patients.append(patient)
-        elif os.path.isfile('data/mimic-iii-0/val/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv'):
-            rea_label = pd.read_csv('data/mimic-iii-0/val/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][0]
-            labels.append(rea_label)
-            patients.append(patient)
-        elif os.path.isfile('data/mimic-iii-0/test/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv'):
-            rea_label = pd.read_csv('data/mimic-iii-0/test/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][0]
-            labels.append(rea_label)
-            patients.append(patient)
-        else:
-            print("PATIENT NOT FOUND: ", patient)
-
-    labels0 = np.array([idx for idx, label in zip(patients, labels) if label == 0])
-    labels1 = np.array([idx for idx, label in zip(patients, labels) if label == 1])
-    np.random.shuffle(labels0)
-    np.random.shuffle(labels1)
-
-    for ratio in [0.01, 0.1, 0.05, 0.5]:
-        label_idxs0 = np.random.choice(labels0, size=round(len(labels0) * (1 - ratio)), replace=False)
-        label_idxs1 = np.random.choice(labels1, size=round(len(labels1) * (1 - ratio)), replace=False)
-        label_idxs = np.concatenate([label_idxs0, label_idxs1])
-        # if folders are not created, create them
-        if not os.path.exists(f'data/mimic-iii-0/drop'):
-            os.makedirs(f'data/mimic-iii-0/drop')
-        np.save(f'data/mimic-iii-0/drop/label_drop_idxs_rot{rotation}_{ratio}_rea.npy', label_idxs)
-
-
-def generate_labels_to_drop_mimic_rea_balanced(rotation):  # needs to be balanced, as otherwise in 1% one label is missing
-    # currently for los
-    with open(f'data/mimic-iii-0/rotations/train_patients_rot_{rotation}.json') as f:
-        train_idxs = json.load(f)
-
-    labels = []
-    patients = []
-    for patient in tqdm(train_idxs):
-        if os.path.isfile('data/mimic-iii-0/train/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv'):
-            rea_label = pd.read_csv('data/mimic-iii-0/train/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][
-                0]
-            labels.append(rea_label)
-            patients.append(patient)
-        elif os.path.isfile('data/mimic-iii-0/val/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv'):
-            rea_label = pd.read_csv('data/mimic-iii-0/val/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][0]
-            labels.append(rea_label)
-            patients.append(patient)
-        elif os.path.isfile('data/mimic-iii-0/test/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv'):
-            rea_label = pd.read_csv('data/mimic-iii-0/test/patient_' + str(patient) + '/' + 'static_tasks_binary_multilabel.csv')['Readmission 30'][0]
-            labels.append(rea_label)
-            patients.append(patient)
-        else:
-            print("PATIENT NOT FOUND: ", patient)
-
-    labels0 = np.array([idx for idx, label in zip(patients, labels) if label == 0])
-    labels1 = np.array([idx for idx, label in zip(patients, labels) if label == 1])
-    np.random.shuffle(labels0)
-    np.random.shuffle(labels1)
-
-    for ratio in [0.01, 0.1, 0.05, 0.5]:
-        labels_needed = round(len(labels) * ratio)
-        labels1_needed = min(round(labels_needed / 2), len(labels1))
-        labels0_needed = labels_needed - labels1_needed
-        drop1 = len(labels1) - labels1_needed
-        drop0 = len(labels0) - labels0_needed
-
-        label_idxs0 = np.random.choice(labels0, size=drop0, replace=False)
-        print(len(label_idxs0))
-        label_idxs1 = np.random.choice(labels1, size=drop1, replace=False)
-        print(len(label_idxs1))
-        label_idxs = np.concatenate([label_idxs0, label_idxs1])
-        # if folders are not created, create them
-        if not os.path.exists(f'data/mimic-iii-0/drop'):
-            os.makedirs(f'data/mimic-iii-0/drop')
-        np.save(f'data/mimic-iii-0/drop/label_drop_idxs_rot{rotation}_{ratio}_rea_bal.npy', label_idxs)
 
 
 def print_class_imbalances(fold=0):
@@ -251,41 +163,4 @@ def summarize_acu_task(y):
 
 
 if __name__ == '__main__':
-    # generate_cross_val_split()
-    # generate_labels_to_drop_same_samples()
-    # generate_stratified_cross_val_split()
-
-    # generate_labels_to_drop_mimic_rea(rotation=0)
-    # generate_labels_to_drop_mimic_rea(rotation=1)
-    # generate_labels_to_drop_mimic_rea(rotation=2)
-    # generate_labels_to_drop_mimic_rea(rotation=7)
-    # generate_labels_to_drop_mimic_rea(rotation=8)
-    # generate_labels_to_drop_mimic_rea(rotation=9)
-    generate_labels_to_drop_mimic_rea_balanced(rotation=0)
-    generate_labels_to_drop_mimic_rea_balanced(rotation=1)
-    generate_labels_to_drop_mimic_rea_balanced(rotation=2)
-    generate_labels_to_drop_mimic_rea_balanced(rotation=7)
-    generate_labels_to_drop_mimic_rea_balanced(rotation=8)
-    generate_labels_to_drop_mimic_rea_balanced(rotation=9)
-
-    # generate_labels_to_drop_balanced(fold=9)
-
-    '''
-    labels_10 = np.load(f'data/tadpole/split/label_drop_idxs_fold2_0.1_same_samples.npy')
-    labels_25 = np.load(f'data/tadpole/split/label_drop_idxs_fold2_0.25_same_samples.npy')
-    labels_50 = np.load(f'data/tadpole/split/label_drop_idxs_fold2_0.5_same_samples.npy')
-    labels_75 = np.load(f'data/tadpole/split/label_drop_idxs_fold2_0.75_same_samples.npy')
-    labels_90 = np.load(f'data/tadpole/split/label_drop_idxs_fold2_0.9_same_samples.npy')
-    # no seed fix drop_val
-    print("no seed fix drop_val:")
-    compute_mean_and_std([92.98, 94.74, 89.47, 94.74, 89.29, 91.07, 94.64, 85.71, 84.29, 100.0])
-    # no seed fix with_val
-    print("no seed fix with_val:")
-    compute_mean_and_std([92.98, 91.23, 89.47, 98.25, 92.86, 87.5, 91.07, 85.36, 85.36, 87.5])
-    # seed fix drop_val
-    print("seed fix drop_val:")
-    compute_mean_and_std([92.98, 94.74, 85.96, 92.98, 94.64, 87.5, 89.29, 85.71, 85.71, 100.0])
-    # seed fix with_val
-    print("seed fix with_val:")
-    compute_mean_and_std([94.74, 94.74, 89.47, 92.98, 92.86, 91.07, 89.29, 89.29, 83.93, 96.43])
-    '''
+    pass

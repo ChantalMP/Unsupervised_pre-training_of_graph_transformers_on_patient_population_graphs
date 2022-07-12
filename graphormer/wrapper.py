@@ -21,7 +21,7 @@ def convert_to_single_emb(x, offset=512):
     return x
 
 
-def preprocess_item_ehr(item, offset=512, edges=False, data_path=None, bin_split_idx=0, one_node=False):
+def preprocess_item_ehr(item, offset=512, edges=False, data_path=None, bin_split_idx=0):
     start_p = time.time()
     edge_attr, edge_index, x, node_id = item.edge_attr, item.edge_index, item.x, item.node_id
     orig_x = x.clone()
@@ -36,16 +36,14 @@ def preprocess_item_ehr(item, offset=512, edges=False, data_path=None, bin_split
 
     # node adj matrix [N, N] bool
     adj = torch.zeros([N, N], dtype=torch.bool)
-    if not one_node:
-        adj[edge_index[0, :], edge_index[1, :]] = True
+    adj[edge_index[0, :], edge_index[1, :]] = True
 
     if edges:
         # edge feature here
         if len(edge_attr.size()) == 1:
             edge_attr = edge_attr[:, None]
         attn_edge_type = torch.zeros([N, N, edge_attr.size(-1)], dtype=torch.int)
-        if not one_node:
-            attn_edge_type[edge_index[0, :], edge_index[1, :]] = convert_to_single_emb(edge_attr, offset=3) + 1
+        attn_edge_type[edge_index[0, :], edge_index[1, :]] = convert_to_single_emb(edge_attr, offset=3) + 1
 
     start = time.time()
     shortest_path_result, path = algos.floyd_warshall(adj.numpy())
@@ -73,7 +71,7 @@ def preprocess_item_ehr(item, offset=512, edges=False, data_path=None, bin_split
         item.edge_input = torch.from_numpy(edge_input).long()
         item.attn_edge_type = attn_edge_type
     print('full preprocessing: ', time.time() - start_p)
-    if data_path and not one_node:
+    if data_path:
         torch.save(item, data_path)
     return item
 
@@ -236,7 +234,6 @@ def preprocess_item_mimic_gcn(item):
 
 def add_masking(item, mask_ratio=0.1):
     # mask further features with masked value in input and create update mask only true for masked values, do not mask missing values
-    # use 0.0 and not 95 for continuous masked features (as linear layer can not deal with such a different value)
     missing_mask_disc = (item.orig_x[:, 1:6] == item.mask_value)
     missing_mask_cont = (item.orig_x[:, 7:] == item.mask_value)
     item.x[:, 7:][missing_mask_cont] = -1.0  # make recognizable

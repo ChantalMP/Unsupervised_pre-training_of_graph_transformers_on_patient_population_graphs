@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from data_analysis.mimic_data_analysis import get_original_ages
+from data_preprocessing.mimic_data_analysis import get_original_ages
 
 
 def transform_tadpole():
@@ -79,29 +79,6 @@ def transform_tadpole():
     df.to_csv('data/tadpole/raw/tadpole_numerical.csv', index=False)
 
 
-def get_mean_dataset_values():
-    value_means = defaultdict(list)
-    for folder in tqdm(os.listdir('data/mimic-iii-0/train')):
-        # if folder is not a directory , skip it
-        if not os.path.isdir('data/mimic-iii-0/train/' + folder) or not folder.startswith('patient'):
-            continue
-        ts_vals = pd.read_csv('data/mimic-iii-0/train/' + folder + '/' + 'ts_vals.csv')
-        ts_is_measured = pd.read_csv('data/mimic-iii-0/train/' + folder + '/' + 'ts_is_measured.csv')
-
-        for col in ts_vals.columns:
-            is_measured = ts_is_measured[col.replace("'mean'", "'time_since_measured'")]
-            ts_vals[col] = ts_vals[col].mask(is_measured == 0.0, np.nan)
-            value_means[col].append(ts_vals[col].dropna().mean())
-
-    # convert all lists in value_means to overall mean
-    for col in value_means:
-        value_means[col] = np.nanmean(value_means[col])
-
-    # save means to file
-    with open('data/mimic-iii-0/value_means.json', 'w') as f:
-        json.dump(value_means, f)
-
-
 def transform_sepsis(set='A'):
     filepath = f"data/sepsis/training_set{set}/"
     for filename in os.listdir(filepath):
@@ -164,50 +141,6 @@ def transform_sepsis(set='A'):
                 # save adapted file
                 file.to_csv(f'data/sepsis/training_set{set}/' + filename, sep='|', index=False)
                 np.save(f'data/sepsis/training_set{set}/is_measured' + filename.split('.')[0], is_measured)
-
-
-def get_mean_dataset_values_sepsis(set='A'):
-    values = defaultdict(list)
-    value_means = defaultdict(list)
-    value_stds = defaultdict(list)
-    filepath = f"data/sepsis/training_set{set}/"
-
-    with open(f'data/sepsis/train_set{set}.json') as f:
-        train_set = json.load(f)
-    for i, filename in enumerate(os.listdir(filepath)):
-        if filename.endswith(".psv"):
-            patient = filename.split("p")[1]  # want only training set mean/var for normalization
-            patient = patient.split(".")[0]
-            if patient in train_set:
-                vals = pd.read_csv(f'{filepath}p{patient}.psv', sep="|").drop(
-                    columns=['Hour', 'age', 'gender', 'Unit1', 'Unit2', 'HospAdmTime', 'ICULOS', 'SepsisLabel', 'Patient_ID', 'sepsis_bin'])
-                is_measured = np.load(f'{filepath}is_measuredp{patient}.npy')
-
-                for idx, col in enumerate(vals.columns):
-                    vals[col] = vals[col].mask(is_measured[:, idx] == False, np.nan)
-                    values[col].extend(vals[col].dropna())
-
-                # get for age and HospAdmTime
-                dems = pd.read_csv(f'{filepath}p{patient}.psv', sep="|")[['age', 'HospAdmTime']]
-                values['age'].append(dems['age'][0])
-                values['HospAdmTime'].append(dems['HospAdmTime'][0])
-
-    # convert all lists in value_means to overall mean
-    for col in values:
-        value_means[col] = np.mean(values[col])
-        value_stds[col] = np.std(values[col])
-
-    # for age and HospAdmTime
-    value_means['age'] = np.mean(values['age'])
-    value_stds['age'] = np.std(values['age'])
-    value_means['HospAdmTime'] = np.mean(values['HospAdmTime'])
-    value_stds['HospAdmTime'] = np.std(values['HospAdmTime'])
-
-    # save means to file
-    with open(f'data/sepsis/value_means{set}.json', 'w') as f:
-        json.dump(value_means, f)
-    with open(f'data/sepsis/value_stds{set}.json', 'w') as f:
-        json.dump(value_stds, f)
 
 
 def transform_mimic():

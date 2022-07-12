@@ -1,5 +1,6 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+# code was adapted for our data
 
 from functools import partial
 
@@ -19,7 +20,7 @@ cross_val_datasets = {}
 def get_dataset(dataset_name='abaaba', cross_val_split=None, drop_val_patients=None, fold=None, task=None, num_graphs=43,
                 edge_vars='full_edge_full_node',
                 gcn=False, mlp=False, gat=False, graphsage=False, gin=False, rotation=0, pad_mode='original', mask_ratio=0.15, block_size=6,
-                use_sim_graph_tadpole=True, mask_all=False, k=5,
+                mask_all=False, k=5,
                 use_simple_acu_task=False, set_id='A', label_ratio=1.0):
     global dataset
     global cross_val_datasets
@@ -38,15 +39,15 @@ def get_dataset(dataset_name='abaaba', cross_val_split=None, drop_val_patients=N
             'evaluator': FeatAccuracy(),
             'train_dataset': MyTadpoleDataset(root='data/tadpole', mask=mask, name='tadpole', raw_file_name='tadpole_numerical.csv', offset=96,
                                               bin_split_idx=5, split='train', drop_val_patients=drop_val_patients, cross_val_split=cross_val_split,
-                                              fold=fold, use_sim_graph_tadpole=use_sim_graph_tadpole, mask_all=mask_all, mask_ratio=mask_ratio,
+                                              fold=fold, mask_all=mask_all, mask_ratio=mask_ratio,
                                               task=task),
             'valid_dataset': MyTadpoleDataset(root='data/tadpole', mask=mask, name='tadpole', raw_file_name='tadpole_numerical.csv', offset=96,
                                               bin_split_idx=5, split='val', drop_val_patients=drop_val_patients, cross_val_split=cross_val_split,
-                                              fold=fold, use_sim_graph_tadpole=use_sim_graph_tadpole, mask_all=mask_all, mask_ratio=mask_ratio,
+                                              fold=fold, mask_all=mask_all, mask_ratio=mask_ratio,
                                               task=task),
             'test_dataset': MyTadpoleTestDataset(root='data/tadpole', mask=mask, name='tadpole', raw_file_name='tadpole_numerical.csv', offset=96,
                                                  bin_split_idx=5, split='val', drop_val_patients=drop_val_patients, cross_val_split=cross_val_split,
-                                                 fold=fold, use_sim_graph_tadpole=use_sim_graph_tadpole, mask_all=mask_all, mask_ratio=mask_ratio,
+                                                 fold=fold, mask_all=mask_all, mask_ratio=mask_ratio,
                                                  task=task),
             'update_mask': None,
             'max_node': 565,
@@ -64,10 +65,10 @@ def get_dataset(dataset_name='abaaba', cross_val_split=None, drop_val_patients=N
             'evaluator': FeatAccuracy(),
             'train_dataset': MyTadpoleDataset(root='data/tadpole', mask=mask, name='tadpole', raw_file_name='tadpole_numerical.csv', offset=96,
                                               bin_split_idx=5, split='train', drop_val_patients=drop_val_patients, cross_val_split=cross_val_split,
-                                              fold=fold, use_sim_graph_tadpole=use_sim_graph_tadpole, k=k),
+                                              fold=fold, k=k),
             'valid_dataset': MyTadpoleDataset(root='data/tadpole', mask=mask, name='tadpole', raw_file_name='tadpole_numerical.csv', offset=96,
                                               bin_split_idx=5, split='val', drop_val_patients=drop_val_patients, cross_val_split=cross_val_split,
-                                              fold=fold, use_sim_graph_tadpole=use_sim_graph_tadpole, k=k),
+                                              fold=fold, k=k),
             'update_mask': None,
             'max_node': 565,
         }
@@ -167,7 +168,6 @@ class GraphDataModule(LightningDataModule):
             pad_mode='original',
             mask_ratio=0.15,
             block_size=6,
-            use_sim_graph_tadpole=True,
             mask_all=False,
             k=5,
             use_simple_acu_task=False,
@@ -181,7 +181,7 @@ class GraphDataModule(LightningDataModule):
         self.dataset = get_dataset(self.dataset_name, cross_val_split=cross_val_split, drop_val_patients=drop_val_patients, fold=fold, task=task,
                                    num_graphs=num_graphs, edge_vars=edge_vars, gcn=gcn, mlp=mlp, gat=gat, graphsage=graphsage, gin=gin,
                                    rotation=rotation, pad_mode=pad_mode, mask_ratio=mask_ratio, block_size=block_size, mask_all=mask_all,
-                                   use_sim_graph_tadpole=use_sim_graph_tadpole, k=k, use_simple_acu_task=use_simple_acu_task, set_id=set_id,
+                                   k=k, use_simple_acu_task=use_simple_acu_task, set_id=set_id,
                                    label_ratio=label_ratio)
 
         self.num_workers = num_workers
