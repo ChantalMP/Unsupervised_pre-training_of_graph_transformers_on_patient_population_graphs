@@ -112,12 +112,12 @@ Advances in Neural Information Processing Systems 34 (2021)
 Please cite if you use our code:
 
 ```
-@misc{https://doi.org/10.48550/arxiv.2203.12616,
-  doi = {10.48550/ARXIV.2203.12616},
-  url = {https://arxiv.org/abs/2203.12616},
-  author = {Pellegrini, Chantal and Kazi, Anees and Navab, Nassir},
+@misc{https://doi.org/10.48550/arxiv.2207.10603,
+  doi = {10.48550/ARXIV.2207.10603},
+  url = {https://arxiv.org/abs/2207.10603},
+  author = {Pellegrini, Chantal and Navab, Nassir and Kazi, Anees},
   keywords = {Machine Learning (cs.LG), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  title = {Unsupervised Pre-Training on Patient Population Graphs for Patient-Level Predictions},
+  title = {Unsupervised pre-training of graph transformers on patient population graphs},
   publisher = {arXiv},
   year = {2022},
   copyright = {arXiv.org perpetual, non-exclusive license}
