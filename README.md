@@ -1,6 +1,6 @@
 ![method overview](overview.jpg)
 
-This is the official code to the paper "Unsupervised pre-training of graph transformers on patient population graphs".
+This is the official code to the arxiv paper ["Unsupervised pre-training of graph transformers on patient population graphs"](https://arxiv.org/abs/2207.10603).
 
 ## Setup
 
