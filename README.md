@@ -1,6 +1,27 @@
 ![method overview](overview.jpg)
 
-This is the official code to the arxiv paper ["Unsupervised pre-training of graph transformers on patient population graphs"](https://arxiv.org/abs/2207.10603).
+**MedIA Paper:** [![](https://img.shields.io/badge/MedIA-gray)](https://www.sciencedirect.com/science/article/abs/pii/S136184152300155X)
+**PrePrint**: [![](https://img.shields.io/badge/Arxiv-2207.10603-blue)](https://arxiv.org/abs/2207.10603)
+
+This is the official code to the paper "Unsupervised pre-training of graph transformers on patient population graphs", published in the Medical Image Analysis Journal.
+
+We propose novel unsupervised pre-training techniques designed for heterogeneous, multi-modal clinical data for patient outcome prediction inspired by masked language modeling (MLM), by leveraging graph deep learning over population graphs. To this end, we further propose a graph-transformer-based network, designed to handle heterogeneous clinical data. By combining masking-based pre-training with a transformer-based network, we translate the success of masking-based pre-training in other domains to heterogeneous clinical data. We show the benefit of our pre-training method in a self-supervised and a transfer learning setting, utilizing three medical datasets TADPOLE, MIMIC-III, and a Sepsis Prediction Dataset. We find that our proposed pre-training methods help in modeling the data at a patient and population level and improve performance in different fine-tuning tasks on all datasets.
+**Authors**: [Chantal Pellegrini][cp], [Nassir Navab][nn], [Anees Kazi][nn]
+
+[cp]:https://www.cs.cit.tum.de/camp/members/chantal-pellegrini/
+[nn]:https://www.cs.cit.tum.de/camp/members/cv-nassir-navab/nassir-navab/
+[ak]:https://www.cs.cit.tum.de/en/camp/members/anees-kazi/
+
+```
+@article{pellegrini2023unsupervised,
+  title={Unsupervised pre-training of graph transformers on patient population graphs},
+  author={Pellegrini, Chantal and Navab, Nassir and Kazi, Anees},
+  journal={Medical Image Analysis},
+  pages={102895},
+  year={2023},
+  publisher={Elsevier}
+}
+```
 
 ## Setup
 
@@ -107,19 +128,3 @@ repository [https://github.com/microsoft/Graphormer](https://github.com/microsof
 
 [1] Ying, C., Cai, T., Luo, S., Zheng, S., Ke, G., He, D., Shen, Y., Liu, T.Y.: Do transformers really perform badly for graph representation?
 Advances in Neural Information Processing Systems 34 (2021)
-
-## Citation
-Please cite if you use our code:
-
-```
-@misc{https://doi.org/10.48550/arxiv.2207.10603,
-  doi = {10.48550/ARXIV.2207.10603},
-  url = {https://arxiv.org/abs/2207.10603},
-  author = {Pellegrini, Chantal and Navab, Nassir and Kazi, Anees},
-  keywords = {Machine Learning (cs.LG), FOS: Computer and information sciences, FOS: Computer and information sciences},
-  title = {Unsupervised pre-training of graph transformers on patient population graphs},
-  publisher = {arXiv},
-  year = {2022},
-  copyright = {arXiv.org perpetual, non-exclusive license}
-}
-```
